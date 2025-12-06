@@ -7,11 +7,14 @@ import { ComparisonChart } from './ComparisonChart';
 import { MetricSelector } from './MetricSelector';
 import { CompanySelector } from './CompanySelector';
 import { FileUpload } from './FileUpload';
+import { YearRangeFilter } from './YearRangeFilter';
+import { GrowthMetrics } from './GrowthMetrics';
+import { BenchmarkComparison } from './BenchmarkComparison';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatValue, formatLargeNumber, METRICS_INFO } from '@/lib/financialCalculations';
-import { Filter, BarChart3 } from 'lucide-react';
+import { Filter, BarChart3, TrendingUp, Target } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function Dashboard() {
@@ -29,22 +32,31 @@ export function Dashboard() {
 
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [comparisonMetric, setComparisonMetric] = useState('roe');
-  const [yearFilter, setYearFilter] = useState<string>('all');
 
   const years = useMemo(() => {
     return [...new Set(calculatedData.map(d => d.year))].sort((a, b) => a - b);
   }, [calculatedData]);
+
+  const minYear = years.length > 0 ? years[0] : 2020;
+  const maxYear = years.length > 0 ? years[years.length - 1] : 2024;
+  
+  const [yearRange, setYearRange] = useState<[number, number]>([minYear, maxYear]);
+
+  // Update year range when data changes
+  useMemo(() => {
+    if (years.length > 0) {
+      setYearRange([years[0], years[years.length - 1]]);
+    }
+  }, [years]);
 
   const filteredData = useMemo(() => {
     let data = calculatedData;
     if (selectedCompanies.length > 0) {
       data = data.filter(d => selectedCompanies.includes(d.company_name));
     }
-    if (yearFilter !== 'all') {
-      data = data.filter(d => d.year === parseInt(yearFilter));
-    }
+    data = data.filter(d => d.year >= yearRange[0] && d.year <= yearRange[1]);
     return data;
-  }, [calculatedData, selectedCompanies, yearFilter]);
+  }, [calculatedData, selectedCompanies, yearRange]);
 
   const latestYearData = useMemo(() => {
     if (calculatedData.length === 0) return [];
@@ -159,9 +171,17 @@ export function Dashboard() {
             )}
 
             <Tabs defaultValue="table" className="space-y-6">
-              <TabsList>
+              <TabsList className="flex-wrap h-auto gap-1">
                 <TabsTrigger value="table">Data Table</TabsTrigger>
                 <TabsTrigger value="compare">Compare</TabsTrigger>
+                <TabsTrigger value="growth" className="flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" />
+                  Growth
+                </TabsTrigger>
+                <TabsTrigger value="benchmark" className="flex items-center gap-1">
+                  <Target className="h-3 w-3" />
+                  Benchmarks
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="table" className="space-y-6">
@@ -188,22 +208,12 @@ export function Dashboard() {
                         placeholder="All companies"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Year</label>
-                      <Select value={yearFilter} onValueChange={setYearFilter}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="All years" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All years</SelectItem>
-                          {years.map(year => (
-                            <SelectItem key={year} value={year.toString()}>
-                              {year}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <YearRangeFilter
+                      minYear={minYear}
+                      maxYear={maxYear}
+                      selectedRange={yearRange}
+                      onRangeChange={setYearRange}
+                    />
                   </CardContent>
                 </Card>
 
@@ -250,9 +260,80 @@ export function Dashboard() {
                 </Card>
 
                 <ComparisonChart
-                  data={calculatedData}
+                  data={filteredData}
                   selectedCompanies={selectedCompanies}
                   metric={comparisonMetric}
+                />
+              </TabsContent>
+
+              <TabsContent value="growth" className="space-y-6">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base font-medium">
+                      <Filter className="h-4 w-4" />
+                      Growth Analysis Filters
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Companies</label>
+                      <CompanySelector
+                        companies={companies}
+                        selectedCompanies={selectedCompanies}
+                        onSelect={setSelectedCompanies}
+                        multiple
+                        placeholder="All companies"
+                      />
+                    </div>
+                    <YearRangeFilter
+                      minYear={minYear}
+                      maxYear={maxYear}
+                      selectedRange={yearRange}
+                      onRangeChange={setYearRange}
+                    />
+                  </CardContent>
+                </Card>
+
+                <GrowthMetrics
+                  data={filteredData}
+                  companies={selectedCompanies}
+                  selectedMetrics={selectedMetrics}
+                />
+              </TabsContent>
+
+              <TabsContent value="benchmark" className="space-y-6">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base font-medium">
+                      <Filter className="h-4 w-4" />
+                      Benchmark Comparison Filters
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Companies</label>
+                      <CompanySelector
+                        companies={companies}
+                        selectedCompanies={selectedCompanies}
+                        onSelect={setSelectedCompanies}
+                        multiple
+                        placeholder="All companies"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Metrics</label>
+                      <MetricSelector 
+                        selectedMetrics={selectedMetrics}
+                        onSelect={setSelectedMetrics}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <BenchmarkComparison
+                  data={calculatedData}
+                  companies={selectedCompanies}
+                  selectedMetrics={selectedMetrics}
                 />
               </TabsContent>
             </Tabs>
